@@ -60,24 +60,20 @@ aws {
 }
 ```
 
-2. In case you want to to run more jobs in parallel, you can update the Nextflow queue size (`queueSize`) in the nextflow.config file. 
-
-
-### 4. Download and prepare GTDB for fragment recruitment
-
-1. Download GTDB
+2. If you have not created a credentials file in previous steps, create a file with the following format and save it in a folder
+that is shared by all worker nodes.
 
 ```
-mkdir -p gtdb && wget https://openstack.cebitec.uni-bielefeld.de:8080/databases/gtdbtk_r214_data.tar.gz  -O - | tar -xzvf - -C gtdb
-```  
-
-2. Prepare paths file
-
-```
-echo "PATH" > paths.tsv && find gtdb -name "*.fna.gz" | xargs -I {} readlink -f {} >> paths.tsv
+[default]
+aws_access_key_id=
+aws_secret_access_key=
 ```
 
-### 5. Run the main tool
+If you have already created a credentials file, just copy it to the aforementioned folder.
+
+3. In case you want to to run more jobs in parallel, you can update the Nextflow queue size (`queueSize`) in the nextflow.config file. 
+
+### 4. Run the main tool
 
 1. Install nextflow
 `cd metagenomics-tk && make nextflow`
@@ -89,13 +85,24 @@ Specify `-with-weblog http://localhost:8000/run/<token-id>/` if you want to use 
 Final command:
 
 ```
-./nextflow -c prod_toolkit/aws.config run main.nf \
-    -ansi-log false -profile slurm -resume -entry wFullPipeline -params-file default/fullPipeline_illumina_nanpore_without_aggregate.yml \
+./nextflow -c AWS run main.nf \
+    -ansi-log false -profile slurm -resume -entry wFullPipeline -params-file CONFIG \
+    --input.SRA.S3.path=SAMPLES \ 
+    --steps.annotation.mmseqs2.kegg.database.download.s5cmd.keyfile=S5CMD_CREDENTIALS \
+    --steps.fragmentRecruitment.mashScreen.genomes=FRAGMENT_RECRUITMENT \
     --smetana_image=pbelmann/metabolomics:0.1.0  --carveme_image=pbelmann/metabolomics:0.1.0 \
-    --steps.metabolomics.beforeProcessScript=/vol/spool/metagenomics-tk/cplex/buildScript.sh  --steps.metabolomics.carveme.additionalParams=''
+    --steps.metabolomics.beforeProcessScript=cplex/buildScript.sh  --steps.metabolomics.carveme.additionalParams='' 
 ```
 
-### 6. Postprocess
+where
+  * AWS is file that should point to a file containing AWS credentials.
+  * CONFIG is pointing to one of the config files in the "per_sample" folder. Example: https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/per_sample/bi/fullPipeline_illumina_nanpore_without_aggregate.yml   
+  * SAMPLES is file containing SRA ids. It should be one of the files in the datasets folder https://raw.githubusercontent.com/pbelmann/wastewater-study/main/datasets/test-1.tsv?token=GHSAT0AAAAAABVMSFLS2YMOP6RIHMWK6E2WZH7Q5IQ
+  * S5CMD_CREDENTIALS is a file containing credentials for S5CMD.
+  * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It should point to the URL: https://github.com/pbelmann/wastewater-study/raw/main/datasets/genomes.tsv
+ 
+
+### 5. Postprocess
 
 Once the run is finished,
  * collect the stats produced by the trace file and commit them with the correct name pattern.
