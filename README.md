@@ -73,7 +73,21 @@ If you have already created a credentials file, just copy it to the aforemention
 
 3. In case you want to to run more jobs in parallel, you can update the Nextflow queue size (`queueSize`) in the nextflow.config file. 
 
-### 4. Run the main tool
+### 4. Download and prepare GTDB for fragment recruitment
+
+1. Download GTDB
+
+```
+mkdir -p gtdb && wget https://openstack.cebitec.uni-bielefeld.de:8080/databases/gtdbtk_r214_data.tar.gz  -O - | tar -xzvf - -C gtdb
+```  
+
+2. Prepare paths file
+
+```
+echo "PATH" > paths.tsv && find gtdb -name "*.fna.gz" | xargs -I {} readlink -f {} >> paths.tsv
+```
+
+### 5. Run the main tool
 
 1. Install nextflow
 `cd metagenomics-tk && make nextflow`
@@ -91,7 +105,7 @@ Final command:
     --steps.annotation.mmseqs2.kegg.database.download.s5cmd.keyfile=S5CMD_CREDENTIALS \
     --steps.fragmentRecruitment.mashScreen.genomes=FRAGMENT_RECRUITMENT \
     --smetana_image=pbelmann/metabolomics:0.1.0  --carveme_image=pbelmann/metabolomics:0.1.0 \
-    --steps.metabolomics.beforeProcessScript=cplex/buildScript.sh  --steps.metabolomics.carveme.additionalParams='' 
+    --steps.metabolomics.beforeProcessScript=CPLEX  --steps.metabolomics.carveme.additionalParams='' 
 ```
 
 where
@@ -99,10 +113,11 @@ where
   * CONFIG is pointing to one of the config files in the "per_sample" folder. Example: https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/per_sample/bi/fullPipeline_illumina_nanpore_without_aggregate.yml   
   * SAMPLES is file containing SRA ids. It should be one of the files in the datasets folder https://raw.githubusercontent.com/pbelmann/wastewater-study/main/datasets/test-1.tsv?token=GHSAT0AAAAAABVMSFLS2YMOP6RIHMWK6E2WZH7Q5IQ
   * S5CMD_CREDENTIALS is a file containing credentials for S5CMD.
-  * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It should point to the URL: https://github.com/pbelmann/wastewater-study/raw/main/datasets/genomes.tsv
+  * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It 
+  * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
  
 
-### 5. Postprocess
+### 6. Postprocess
 
 Once the run is finished,
  * collect the stats produced by the trace file and commit them with the correct name pattern.
