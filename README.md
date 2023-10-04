@@ -19,17 +19,19 @@ This part only works if you have access to a private bucket hosted on the Bielef
 If this is not the case, you can download the cplex binary from the IBM website.
 Note that you will need to register with IBM to obtain an academic license for CPLEX.
 
-1. Create a credentials file for s5cmd in your .aws folder: $HOME/.aws/credentials with the following content:
+
+1. Change directory to metagenomics-tk: `cd metagenomics-tk`
+
+2. Create a file named `credentials` for s5cmd with the following content:
 
 ```
 [default]
 aws_access_key_id=
 aws_secret_access_key=
 ```
-2. Change directory to metagenomics-tk: `cd metagenomics-tk`
 
 3. Place the cplex binary in cplex/docker: 
-   `./bin/s5cmd  --endpoint-url https://openstack.cebitec.uni-bielefeld.de:8080 cp s3://wastewater-assets/cos_installer-1.bin  cplex/docker/`
+   `./bin/s5cmd --credentials-file credentials  --endpoint-url https://openstack.cebitec.uni-bielefeld.de:8080 cp s3://wastewater-assets/cos_installer-1.bin  cplex/docker/`
 
 4. Update builScript.sh script by setting the `DOCKERILE_FOLDER` variable. It should point the folder where the Dockerfile is placed.
    Example: `/vol/spool/final/metagenomics-tk/cplex/docker`
@@ -68,8 +70,6 @@ that is shared by all worker nodes.
 aws_access_key_id=
 aws_secret_access_key=
 ```
-
-If you have already created a credentials file, just copy it to the aforementioned folder.
 
 3. In case you want to to run more jobs in parallel, you can update the Nextflow queue size (`queueSize`) in the nextflow.config file. 
 
