@@ -87,7 +87,7 @@ mkdir -p gtdb && wget https://openstack.cebitec.uni-bielefeld.de:8080/databases/
 echo "PATH" > paths.tsv && find gtdb -name "*.fna.gz" | xargs -I {} readlink -f {} >> paths.tsv
 ```
 
-### 5. Run the main tool
+### 5. Execute the per sample mode
 
 1. Install nextflow
 `cd metagenomics-tk && make nextflow`
@@ -115,7 +115,6 @@ where
   * S5CMD_CREDENTIALS is a file containing credentials for S5CMD.
   * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It 
   * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
- 
 
 ### 6. Postprocess
 
@@ -125,5 +124,32 @@ Once the run is finished,
 
 ## Aggregation
 
-## 1. Run the following command for aggregating
+In order to execute the aggregation mode you will have to follow the instructions of step 1,2 and 3 of the per sample run mode.
+
+### 1. Execute the aggregation mode
+
+1. Install nextflow
+`cd metagenomics-tk && make nextflow`
+
+2. In addition to the main Nextflow run command you can optionaly add the following parameter:
+
+Specify `-with-weblog http://localhost:8000/run/<token-id>/` if you want to use a logging system like nf-tower or TraceFlow(https://github.com/vktrrdk/nextflowAnalysis).
+
+Final command:
+
+```
+./nextflow -c AWS run main.nf \
+    -profile slurm -resume -entry wAggregatePipeline \
+    -params-file https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/aggregate/fullPipelineAggregate.yml \
+    --smetana_image=pbelmann/metabolomics:0.1.0 \
+    --steps.cooccurrence.beforeProcessScript=CPLEX \
+```
+
+where
+  * AWS is file that should point to a file containing AWS credentials. 
+  * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
+ 
+## Best Practices
+
+* In case the pipeline stops, please first delete all sample keys in the output S3 bucket and then resume the pipeline.
 
