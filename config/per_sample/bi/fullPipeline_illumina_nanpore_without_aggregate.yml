@@ -257,7 +257,7 @@ steps:
      filter:
        minCompleteness: 50
        maxContamination: 5
-     gapseq:
+     carveme:
        additionalParams: ""
      smetana:
        global: false
