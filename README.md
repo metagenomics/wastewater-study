@@ -33,7 +33,7 @@ aws_secret_access_key=
 3. Place the cplex binary in cplex/docker: 
    `./bin/s5cmd --credentials-file credentials  --endpoint-url https://openstack.cebitec.uni-bielefeld.de:8080 cp s3://wastewater-assets/cos_installer-1.bin  cplex/docker/`
 
-4. Update builScript.sh script by setting the `DOCKERILE_FOLDER` variable. It should point the folder where the Dockerfile is placed.
+4. Update the buildScript.sh script in the cplex directory, by setting the `DOCKERILE_FOLDER` variable. It should point to the folder where the Dockerfile is placed.
    Example: `/vol/spool/final/metagenomics-tk/cplex/docker`
 
 
