@@ -51,11 +51,9 @@ aws {
     client {
 
       s_3_path_style_access = true
-      connectionTimeout = 120000
       maxParallelTransfers = 28 
       maxErrorRetry = 10
       protocol = 'HTTPS'
-      connectionTimeout = '2000'
       endpoint = 'https://openstack.cebitec.uni-bielefeld.de:8080'
       signerOverride = 'AWSS3V4SignerType'
     }
