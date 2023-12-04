@@ -174,7 +174,7 @@ steps:
       ncbi_nr:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
         database:
-          extractedDBPath: /vol/spool/databases/mmseqs_taxonomy/nr_2023-04-29_mmseqs_taxonomy
+          extractedDBPath: /vol/spool/databases/mmseqs_taxonomy/nr_2023-04-29_mmseqs_taxonomy/sequenceDB
     mmseqs2_taxonomy:
       # Run taxonomy classification on MAGs and unbinable contigs or just the later
       runOnMAGs: true
@@ -184,7 +184,7 @@ steps:
         # Load database into memory to speed up classification, only works if --db-load-mode 3 is set in params
         ramMode: false
         database:
-          extractedDBPath: /vol/spool/databases/mmseqs_gtdb
+          extractedDBPath: /vol/spool/databases/mmseqs_gtdb/gtdb_database
     rgi:
       # --include_loose includes matches of more distant homologs of AMR genes which may also report spurious partial matches
       # --include_nudge Partial ORFs may do not pass curated bitscore cut-offs or novel samples may contain divergent alleles, so nudging 
