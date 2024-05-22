@@ -1,6 +1,5 @@
 tempdir: "tmp"
 summary: false
-output: "s3://wastewater"
 input: "s3://wastewater"
 logDir: log
 runid: 1
@@ -33,7 +32,7 @@ steps:
      # Just using relative abundance makes it difficult to tell if a genome is part of a dataset.
      # Thats why it makes sense to set at leat a low min covered fraction parameter.
     coverm:
-      additionalParams: " --min-covered-fraction 30 "
+      additionalParams: " --exclude-supplementary --min-covered-fraction 90  --min-read-percent-identity 95 --min-read-aligned-percent 95 "
     minimap2:
       additionalParams:
         minimap2_index: ""

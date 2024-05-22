@@ -141,11 +141,13 @@ Final command:
     -params-file https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/aggregate/fullPipelineAggregate.yml \
     --smetana_image=pbelmann/metabolomics:0.1.0 \
     --steps.cooccurrence.beforeProcessScript=CPLEX \
+    --output=OUTPUT
 ```
 
 where
   * AWS is file that should point to a file containing AWS credentials. 
   * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
+  * OUTPUT points to an output directory or S3 bucket if available.
  
 ## Best Practices
 
