@@ -1,4 +1,4 @@
-new_complete_name	library_id	unique_sample_id	batch_name	country	country_alpha2	country_alpha3	city	latitude	longtitude	batch_abbr	year	collection_date	isolation_source	organism	ena_sample_acc	ena_experiment_acc	ena_run_acc	instrument_model	selected
+new_complete_name	library_id	unique_sample_id	batch_name	country	country_alpha2	country_alpha3	city	latitude	longitude	batch_abbr	year	collection_date	isolation_source	organism	ena_sample_acc	ena_experiment_acc	ena_run_acc	instrument_model	selected
 DTU_2016_1_1_MG_ALB-17	1	2016_pil_alb_01	GS pilot 2016	Albania	AL	ALB	Tirana	41.32	19.9	pil	16	1/2/2016	wastewater	wastewater metagenome	ERS2520863	ERX2624029	ERR2607373	Illumina HiSeq 3000	TRUE
 DTU_2016_2_2_MG_ALB-17_1	2	2016_pil_alb_01	GS pilot 2016	Albania	AL	ALB	Tirana	41.32	19.9	pil	16	1/2/2016	wastewater	wastewater metagenome	ERS2520861	ERX2624027	ERR2607371	Illumina HiSeq 3000	FALSE
 DTU_2016_3_3_MG_ALB-17_2	3	2016_pil_alb_01	GS pilot 2016	Albania	AL	ALB	Tirana	41.32	19.9	pil	16	1/2/2016	wastewater	wastewater metagenome	ERS2520862	ERX2624028	ERR2607372	Illumina HiSeq 3000	FALSE
