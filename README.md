@@ -11,7 +11,7 @@ You will need to install java on the master node.
 
 ### 1. Checkout the repo and download all necessary assets
 
-1. Checkout `git clone  --depth 1 --branch  <tag name> git@github.com:pbelmann/metagenomics-tk.git`
+1. Checkout `git clone  --depth 1 --branch  <tag name> git@github.com:metagenomics/metagenomics-tk.git`
 
 ### 2. Download cplex binary
 
@@ -108,8 +108,8 @@ Final command:
 
 where
   * AWS is file that should point to a file containing AWS credentials.
-  * CONFIG is pointing to one of the config files in the "per_sample" folder. Example: https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/per_sample/bi/fullPipeline_illumina_nanpore_without_aggregate.yml   
-  * SAMPLES is file containing SRA ids. It should be one of the files in the datasets folder https://raw.githubusercontent.com/pbelmann/wastewater-study/main/datasets/test-1.tsv?token=GHSAT0AAAAAABVMSFLS2YMOP6RIHMWK6E2WZH7Q5IQ
+  * CONFIG is pointing to one of the config files in the "per_sample" folder. Example: https://raw.githubusercontent.com/metagenomics/wastewater-study/refs/heads/main/config/aggregate/fullPipelineAggregate.yml   
+  * SAMPLES is file containing SRA ids. It should be one of the files in the datasets folder https://raw.githubusercontent.com/metagenomics/wastewater-study/refs/heads/main/datasets/test-1.tsv
   * S5CMD_CREDENTIALS is a file containing credentials for S5CMD.
   * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It 
   * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
@@ -138,7 +138,7 @@ Final command:
 ```
 ./nextflow -c AWS run main.nf \
     -profile slurm -resume -entry wAggregatePipeline \
-    -params-file https://raw.githubusercontent.com/pbelmann/wastewater-study/main/config/aggregate/fullPipelineAggregate.yml \
+    -params-file https://raw.githubusercontent.com/metagenomics/wastewater-study/main/config/aggregate/fullPipelineAggregate.yml \
     --smetana_image=pbelmann/metabolomics:0.1.0 \
     --steps.cooccurrence.beforeProcessScript=CPLEX \
     --output=OUTPUT
