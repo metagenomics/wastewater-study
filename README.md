@@ -141,11 +141,7 @@ In order to execute the aggregation mode you will have to follow the instruction
 1. Install nextflow
 `cd metagenomics-tk && make nextflow`
 
-2. In addition to the main Nextflow run command you can optionaly add the following parameter:
-
-Specify `-with-weblog http://localhost:8000/run/<token-id>/` if you want to use a logging system like nf-tower or TraceFlow(https://github.com/vktrrdk/nextflowAnalysis).
-
-Final command:
+2. Final command:
 
 ```
 ./nextflow -c AWS run main.nf \
