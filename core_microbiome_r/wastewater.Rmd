@@ -1,0 +1,689 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wastewater Microbiome Analysis
+
+## Load Libraries
+
+```{r lib}
+#install.packages(c("data.table", "ggtreeExtra", "ggplot2", "ggtree", "ggExtra", "gridExtra", "dplyr", "tidyr", "ggnewscale", "aws.s3", "ggpp", "igraph", "stringr", "gridExtra", "circlize", "UpSetR", "pals", "ComplexUpset", "ComplexHeatmap", "ggpubr", "sf", "rnaturalearth", "rnaturalearthdata" ))
+#library(textworks)
+library(data.table)
+#library(ggtreeExtra)
+library(ggplot2)
+#library(ggtree)
+library(ggExtra)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(ggnewscale)
+library(aws.s3)
+library(ggpp)
+library(igraph)
+library(stringr)
+library(gridExtra)
+library(circlize)
+library(UpSetR)
+library(pals)
+library(ComplexUpset)
+library(ComplexHeatmap)
+library(ggpubr)
+#if (!requireNamespace("BiocManager", quietly=TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install("ComplexHeatmap")
+#library(ggpubr)
+
+# library for geolocation
+library(sf)
+library("rnaturalearth")
+library("rnaturalearthdata")
+library("countrycode")
+
+library(sp)
+library(rworldmap)
+```
+## Utility Functions
+
+```{r utility}
+
+
+
+getFilesInS3 <- function(endpoint, bucket, samples, runid, module, pattern, prefixPath="", header=TRUE){ 
+
+  result_list <- vector(mode="list", length=length(samples))
+
+  for(i in 1:length(samples)) {
+     if(prefixPath==""){
+       prefix <- paste(samples[[i]], runid, module, sep="/")
+     } else {
+        prefix <-paste(prefixPath, paste(samples[[i]], runid, module, sep="/"), sep="/")
+     }
+     result_list[[i]] <- rbindlist(aws.s3::get_bucket(bucket=bucket, max = Inf, base_url=endpoint,
+                                                   prefix=prefix, key="", secret="", url_style="path", region=""))
+
+  }
+
+  result_files_dataframe <- rbindlist(result_list) %>% 
+    filter(grepl(pattern, Key)) %>%
+    distinct(Key)
+  
+  result_files_dataframe$Key <- sub("^", paste("https:/",endpoint, paste(bucket,"/", sep = ""), sep = "/"),result_files_dataframe$Key)
+  
+  files <- result_files_dataframe$Key
+  result_list <- vector(mode="list", length=length(files))
+
+  # loop over files, reading in one at a time
+  for(i in 1:length(files)) {
+    result_list[[i]] <- read.csv(files[i], sep = '\t', header=header)
+  }
+
+  # stack all of the files using rbindlist() from package data.table
+  result_df <- rbindlist(result_list)
+
+  return(list(result=result_df, files=result_files_dataframe))
+}
+
+
+final_taxonomy <- function(SPECIES, GENUS, FAMILY, ORDER, CLASS, PHYLUM, KINGDOM){
+  if(SPECIES=="s__"){
+      if(GENUS=="g__"){
+        if(FAMILY=="f__"){
+            if(ORDER=="o__"){
+                if(CLASS=="c__"){
+                    if(PHYLUM=="p__"){
+                      return(KINGDOM) 
+                    }else{
+                      return(PHYLUM)
+                    } 
+                }else{
+                  return(CLASS)
+                } 
+            }else{
+              return(ORDER)
+            } 
+        }else{
+          return(FAMILY)
+        }
+      }else{
+          return(GENUS)
+      }
+  }else{
+    return(SPECIES)
+  }
+}
+
+final_taxonomy_v <- Vectorize(final_taxonomy)
+
+```
+
+
+## Initialize samples dataframe to analyse
+
+We executed the metagenomics-toolkit on the datasets provided in S3 using the following configuration.
+
+```{r variables}
+
+bucket="wastewater"
+prefix=""
+runid=1
+endpoint="openstack.cebitec.uni-bielefeld.de:8080"
+```
+
+
+Create a dataframe out of the samples used. 
+
+```{r selected_samples}
+used_samples <- read.csv("https://raw.githubusercontent.com/metagenomics/wastewater-study/refs/heads/main/datasets/used_samples.tsv", sep = '\t')
+all_samples <- read.csv("https://raw.githubusercontent.com/metagenomics/wastewater-study/refs/heads/main/datasets/samples.tsv", sep = '\t')
+all_samples$selected <- FALSE
+all_samples[all_samples$ena_run_acc %in% used_samples$ACCESSION,]$selected <- TRUE
+selected_samples <- all_samples[all_samples$selected,]
+
+selected_samples$CONTINENT <- countrycode(sourcevar = selected_samples$country_alpha2, origin = "genc2c", destination = "region")
+selected_samples$COUNTRY <- selected_samples$country
+selected_samples$SAMPLE <- selected_samples$ena_run_acc
+```
+
+## World Map
+
+
+Build world map where each point represents the sample location.
+
+```{r worldmap}
+world <- ne_countries(scale = "medium", returnclass = "sf", type = 'sovereignty')
+wmap <- ggplot(world) + geom_sf(aes(fill=region_wb)) +
+  geom_point(data = selected_samples, aes(x = longitude, y = latitude), fill="red" , size=4, 
+                                                           shape = 23) + 
+  theme(axis.title.x=element_blank(),
+  axis.text.x=element_blank(),
+  axis.ticks.x=element_blank(),axis.title.y = element_blank(), 
+  axis.text.y=element_blank(), axis.ticks.y=element_blank(), 
+  text = element_text(size=20), 
+  plot.title = element_text(hjust = 0.5), 
+  panel.background = element_rect(fill = "white", colour = "white"),) + 
+  labs(fill='Regions') 
+
+wmap
+
+summary(selected_samples %>% group_by(COUNTRY) %>% summarize(COUNT=n()))
+summary(selected_samples %>% group_by(CONTINENT) %>% summarize(COUNT=n()))
+
+summary(selected_samples %>% group_by(COUNTRY) %>% summarize(COUNT=n()))
+summary(selected_samples %>% group_by(CONTINENT) %>% summarize(COUNT=n()))
+```
+
+
+## Sample Size and Quality Control
+
+```{r fastp_download}
+fastp_before_df <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "qc", prefixPath = prefix ,pattern = "fastp_summary_before.tsv")$result
+fastp_before_df$state <- "Before Quality Control" 
+
+fastp_after_df <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "qc", pattern = "fastp_summary_after.tsv", prefixPath = prefix)$result
+# 
+fastp_after_df$state <- "After Quality Control"
+
+fastp_df <- rbindlist(list(fastp_after_df, fastp_before_df))
+```
+
+```{r fastp}
+fastp_unstacked_df <- fastp_df[ , c("SAMPLE","state", "total_bases")] %>% 
+  pivot_wider(id_cols = SAMPLE, names_from = c(state), values_from = total_bases)
+
+fastp_unstacked_df$Difference <-
+  fastp_unstacked_df$`Before Quality Control` - fastp_unstacked_df$`After Quality Control`
+
+box <- ggplot(fastp_unstacked_df[,c("Difference")]) + stat_boxplot(aes(y=Difference, x="Difference")) + ylab("Total Bases")+ xlab("Difference between \nBefore and After\nQuality Control")
+  
+ggplot(fastp_df) +
+    geom_line(aes(x=reorder(SAMPLE, -total_bases, max) , y= total_bases, group=state, color=state)) + scale_color_manual(labels = c("After", "Before"), values = c("red", "blue")) + xlab("Samples") + ylab("Total Bases") +
+    annotate("plot_npc", npcx = "right", npcy = "top", label = box) +
+    theme_minimal() + theme(axis.text.x=element_blank(),  text = element_text(size=20),
+          axis.ticks.x=element_blank()) +  guides(color=guide_legend(title="Quality Control")) 
+```
+### Fastq before and after quality trimming
+
+```{r quality_processing_summary}
+mean(fastp_before_df$total_bases)
+mean(fastp_after_df$total_bases)
+```
+
+
+## Assembly Stats
+
+```{r assembly_stats_download}
+assemblyStats <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "assembly", pattern = "_contigs_stats.tsv", prefixPath = prefix)$result
+```
+
+```{r assembly_stats}
+
+boxplot_n50 <- ggplot(assemblyStats) + geom_boxplot(aes(x=N50)) + coord_flip() +  theme_minimal() +
+  theme(axis.title.x=element_blank(),
+                                   axis.text.x=element_blank(),
+                                   axis.ticks.x=element_blank(),text = element_text(size=20), plot.title = element_text(hjust = 0.5)) + ggtitle("Assembly N50") 
+
+boxplot_length <- ggplot(assemblyStats) + geom_boxplot(aes(x=sum_len)) +   theme_minimal() + coord_flip() +
+  theme(axis.title.x=element_blank(),
+                                   axis.text.x=element_blank(),
+                                   axis.ticks.x=element_blank(), text = element_text(size=20), plot.title = element_text(hjust = 0.5)) + xlab("Assembly Length") + ggtitle("Sum Length")
+
+```
+
+
+## Read Mapping
+
+```{r readMapping_download}
+flagstat_df <- getFilesInS3(endpoint = endpoint, bucket =bucket, samples=used_samples$ACCESSION, runid=runid, module = "binning", pattern = "*_flagstat_passed.tsv",prefixPath = prefix)$result
+```
+
+```{r readMapping}
+
+flagstat_df$mapped_percent <- flagstat_df$mapped/flagstat_df$total..QC.passed.reads...QC.failed.reads.*100
+
+boxplot_readmapping <- ggplot(flagstat_df, aes(x=mapped_percent))+ geom_boxplot() +  theme_minimal() + theme(axis.title.x=element_blank(),
+                                   axis.text.x=element_blank(),
+                                   axis.ticks.x=element_blank(), text = element_text(size=20), plot.title = element_text(hjust = 0.5))+ xlab("Percentage of mapped reads" )   + coord_flip() + ggtitle("Percentage of Mapped Reads")
+                        
+ggplot(flagstat_df, aes(x=SAMPLE, y=mapped_percent))+ geom_bar(stat = "identity")
+```
+
+### Combine Plots with Map
+
+```{r combinePlots}
+mapped_reads_assembly_stats <- merge(assemblyStats, flagstat_df, by="SAMPLE")
+ggplot(mapped_reads_assembly_stats) + geom_point(aes(x=N50, y=sum_len, size=mapped_percent, color=mapped_percent)) + ylab("Assembly Length")
+```
+
+## Nonpareil
+
+
+```{r nonpareil_download}
+nonpareil_df <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "qc", pattern = "*_nonpareil_index.tsv", prefixPath=prefix)$result
+```
+
+```{r nonpareil}
+ggplot(nonpareil_df) + geom_bar(aes(x=SAMPLE, y=diversity), group="SAMPLE", stat="identity")
+ggplot(nonpareil_df) + geom_boxplot(aes(x=diversity)) + coord_flip()
+
+
+map_with_selected_samples_nonpareil <- merge(selected_samples, nonpareil_df, by="SAMPLE")
+
+boxplot_nonpareil <- ggplot(nonpareil_df, aes(x=kappa)) + geom_boxplot() +  coord_flip() + theme_minimal() +
+  theme(axis.title.x=element_blank(),
+                                   axis.text.x=element_blank(),
+                                   axis.ticks.x=element_blank(), text = element_text(size=20), plot.title = element_text(hjust = 0.5)) +  xlab("Nonpareil estimated Genome Coverage in %") + ggtitle("Nonpareil Genome Coverage")
+
+
+boxplot_nonpareil_diversity <- ggplot(nonpareil_df, aes(x=diversity)) + geom_boxplot() +  coord_flip() + theme_minimal()+
+  theme(axis.title.x=element_blank(),
+                                   axis.text.x=element_blank(),
+                                   axis.ticks.x=element_blank(), text = element_text(size=20), plot.title = element_text(hjust = 0.5)) +  xlab("Nonpareil Diversity Index") + ggtitle("Nonpareil Diversity Index")
+
+```
+
+
+```{r interquartile}
+nonpareil_range <- nonpareil_df$kappa
+q1 <- quantile(nonpareil_range, 0.25)
+q3 <- quantile(nonpareil_range, 0.75)
+
+# Calculate IQR
+iqr <- q3 - q1
+
+# Define lower and upper whisker bounds (1.5 times IQR)
+lower_whisker <- q1 - 1.5 * iqr
+upper_whisker <- q3 + 1.5 * iqr
+```
+
+```{r combine_plots}
+ggarrange(boxplot_nonpareil_diversity,  boxplot_nonpareil, boxplot_n50, boxplot_length, boxplot_readmapping, nrow = 1)
+```
+
+##  MAG Quality Check
+
+```{r checkm_download}
+checkm_df <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "magAttributes", pattern = "checkm.*tsv", prefixPath = prefix)$result
+```
+
+```{r checkm}
+checkm_df$MIMAG_HIGH <- ifelse(checkm_df$CONTAMINATION < 5 & checkm_df$COMPLETENESS > 90, TRUE, FALSE)
+checkm_df$MIMAG_MEDIUM <- ifelse(checkm_df$CONTAMINATION < 10 & checkm_df$COMPLETENESS >= 50, TRUE, FALSE)
+
+checkm_df %>% 
+    summarize(ConMean = mean(CONTAMINATION), CompMean = mean(COMPLETENESS), count = n()) %>% 
+    ungroup() %>%
+    mutate("Contamination Mean" = sprintf("%.2f", ConMean),
+           "Completeness Mean" = sprintf("%.2f", CompMean),
+           "Number of MAGs" = sprintf("%.2f", count),
+           "Filter" = "Total") %>% as_tibble -> checkm_summary_all
+
+checkm_df[checkm_df$MIMAG_HIGH == TRUE,] %>% 
+    summarize(ConMean = mean(CONTAMINATION), CompMean = mean(COMPLETENESS), count = n()) %>% 
+    ungroup() %>%
+    mutate("Contamination Mean" = sprintf("%.2f", ConMean),
+           "Completeness Mean" = sprintf("%.2f", CompMean),
+           "Number of MAGs" = sprintf("%.2f", count),
+           "Filter" = "MIMAG High") %>% as_tibble -> checkm_summary_high
+
+checkm_df[checkm_df$MIMAG_MEDIUM == TRUE,] %>% 
+    summarize(ConMean = mean(CONTAMINATION), CompMean = mean(COMPLETENESS), count = n()) %>% 
+    ungroup() %>%
+    mutate("Contamination Mean" = sprintf("%.2f", ConMean),
+           "Completeness Mean" = sprintf("%.2f", CompMean),
+           "Number of MAGs" = sprintf("%.2f", count),
+           "Filter" = "MIMAG Medium") %>% as_tibble -> checkm_summary_medium
+
+checkm_summary <- rbindlist(list(checkm_summary_all, checkm_summary_high, checkm_summary_medium))
+
+p <- ggplot(checkm_df, aes(x=CONTAMINATION, y=COMPLETENESS, color=HETEROGENEITY, group=1)) +
+    geom_point() + scale_color_continuous(name = "Heterogeneity") +
+    theme(text = element_text(size=27), plot.title = element_text(hjust = 0.5), legend.position = c(.95, .45),
+          legend.justification = c("right", "center"),
+          legend.box.just = "right",
+          legend.margin = margin(6, 6, 6, 6)) +
+    xlab("Contamination (%)") + ylab("Completeness (%)") +
+    annotation_custom(tableGrob(checkm_summary[,c("Filter", "Number of MAGs", "Contamination Mean", "Completeness Mean")], rows=NULL,  theme = ttheme_default(base_size = 20)), xmin=85, xmax=200, ymin=15, ymax=-1 ) + ggtitle("Checkm Completeness and Contamination") 
+
+qualityPlot <- ggMarginal(p, type="boxplot", size=17)
+qualityPlot
+```
+
+## MAG Taxonomy
+
+```{r taxonomy_download}
+mag_taxonomy_df <- getFilesInS3(endpoint = endpoint, bucket = bucket, samples=used_samples$ACCESSION, runid= runid, module = "magAttributes/1.0.1/gtdb", pattern = "_gtdbtk_combined.tsv", header=TRUE, prefixPath = prefix)
+```
+
+```{r taxonomy}
+
+tax <- mag_taxonomy_df$result
+gtdb <- tax %>% separate(classification, c('KINGDOM', 'PHYLUM', 'CLASS', 'ORDER', 'FAMILY', 'GENUS', 'SPECIES'), sep = ';')
+
+gtdb_checkm <- merge(checkm_df, gtdb, by="BIN_ID")
+```
+
+### Unknown Tax Level
+
+```{r unknown}
+
+unknown_species <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$SPECIES == "s__",])
+unknown_genus <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$GENUS == "g__",])
+unknown_family <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$FAMILY == "f__",])
+unknown_order <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$ORDER == "o__",])
+unknown_class <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$CLASS == "c__",])
+unknown_phylum <- nrow(gtdb_checkm[gtdb_checkm$MIMAG_HIGH == TRUE & gtdb_checkm$PHYLUM == "p__",])
+
+cat(sprintf("Unknown Species:  \"%f\" \n Unknown Genus:  \"%f\" \n Unknown Family:  \"%f\" \n Unknown Order:  \"%f\"  \n", unknown_species, unknown_genus, unknown_family, unknown_order))
+```
+
+## MAG Clusters
+
+```{r dereplication}
+# lower threshold
+clusters <- read.csv("https://openstack.cebitec.uni-bielefeld.de:8080/wastewater/AGGREGATED/1/dereplication/0.1.1/bottomUpClustering/clusters/clusters.tsv", sep="\t")
+
+clusterSize <- clusters %>% group_by(CLUSTER) %>% summarise(CLUSTER_SIZE=n())
+
+ggplot(clusterSize) + geom_bar(aes(x=CLUSTER_SIZE)) + xlab("Cluster Size") + ylab("Number of Clusters")
+
+magsCONTINENT <- merge(checkm_df, selected_samples, by="SAMPLE")
+clustersContinent <- merge(clusters, magsCONTINENT, by.x="GENOME", by.y="BIN_ID")
+
+distinctContinents <- clustersContinent %>% 
+  group_by(CLUSTER) %>% 
+  summarise(CONTINENT_COUNTER = n_distinct(CONTINENT))
+
+clustersContinentUnstack <- unstack(clustersContinent[,c("CLUSTER", "CONTINENT")])
+
+summary(clusterSize$CLUSTER_SIZE)
+```
+
+## Core Microbiome Computation
+
+```{r core_microbiome_computation}
+
+selected_samples_country <- selected_samples[ ,c("SAMPLE", "COUNTRY")]
+
+complexHeatmapAggregated <- read.csv("https://openstack.cebitec.uni-bielefeld.de:8080/wastewater/AGGREGATED/1/readMapping/0.1.0/abundanceMatrix/relativeAbundanceMatrix.tsv",sep="\t")
+
+# Remove unmapped row
+complexHeatmapAggregated <- complexHeatmapAggregated[complexHeatmapAggregated$Genome != "unmapped",]
+
+# Datasets that contain NA
+names(complexHeatmapAggregated)[sapply(complexHeatmapAggregated, anyNA)]
+complexHeatmapAggregated[is.na(complexHeatmapAggregated)] <- 0
+
+# Skip samples with lower nonpareil genome coverage
+samples_to_use <- nonpareil_df[nonpareil_df$kappa >= lower_whisker,]$SAMPLE
+
+# filter out selected outlier samples
+selected_samples <- selected_samples[selected_samples$SAMPLE %in% samples_to_use,]
+
+abundanceFiltered <- as.data.frame(t(complexHeatmapAggregated))
+
+# Set numeric values
+colnames(abundanceFiltered) <- abundanceFiltered[1,]
+abundanceFiltered <- abundanceFiltered[-1,]
+for(i in 1:ncol(abundanceFiltered)) {
+        abundanceFiltered[[i]] <- as.numeric(abundanceFiltered[[i]])
+}
+
+abundanceFiltered <- abundanceFiltered[row.names(abundanceFiltered) %in% samples_to_use,]
+
+threshold <- 0.9
+
+# Calculate the proportion of zeros in each column
+prop_zeros <- colMeans(abundanceFiltered == 0)
+
+# Get columns to remove (where proportion of zeros exceeds threshold)
+cols_to_remove <- names(prop_zeros[prop_zeros > threshold])
+
+# Select and keep columns with less than 90% zeros
+abundanceFiltered <- as.matrix(abundanceFiltered[, !(names(abundanceFiltered) %in% cols_to_remove)])
+
+# Get GTDB levels
+gtdb_cleaned <- gtdb %>% mutate(BIN_ID_CLEANED = str_replace_all(BIN_ID, ".fa", "")) %>% filter(BIN_ID_CLEANED %in%  colnames(heatmapMa)) %>% mutate(FINAL_TAXONOMY = final_taxonomy_v(SPECIES, GENUS, FAMILY, ORDER, CLASS, PHYLUM, KINGDOM)) %>% 
+  mutate(classification = paste(KINGDOM, PHYLUM,CLASS, ORDER, FAMILY, GENUS, SPECIES, sep=";") )
+
+# Calculate the proportion of zeros in each column and report those that fulfill a defined threshold
+threshold <- 0.60
+prop_zeros <- colMeans(abundanceFiltered > 0)
+cols_to_report <- names(prop_zeros[prop_zeros >= threshold])
+```
+
+```{r prepare_core_plot}
+coreM <- log10(heatmapMa)
+
+count_samples <- function(column, threshold) {
+  sum(column >= as.numeric(threshold))
+}
+
+thresholds <- seq(min(coreM[coreM!=min(coreM)]), max(coreM), 0.001)
+
+# Reverse the order of the thresholds
+thresholds <- rev(thresholds)
+
+# Apply the function to each combination of column and threshold
+result_df <- expand.grid(A = thresholds, Variable = colnames(coreM))
+result_df$U <- apply(result_df, 1, function(row) count_samples(coreM[, row["Variable"]], row["A"]))/nrow(coreM) * 100
+```
+
+## Plot Ubiquity-Abundance for all samples
+
+```{r plot using all samples}
+
+# Set parameters for the selection of organisms and their color
+UBIQUITY_LOWER_THRESHOLD=50
+UBIQUITY_LOWER_THRESHOLD_COLOR=60
+
+filtered_result_df <- result_df %>% filter((U> UBIQUITY_LOWER_THRESHOLD & A > log10(0.000000000001))) %>% dplyr::as_data_frame()
+
+filtered_result_df <- result_df[result_df$Variable %in% filtered_result_df$Variable,]
+
+# Create a color palette for those variable
+condition_met_variables <- unique(filtered_result_df$Variable[filtered_result_df$U > UBIQUITY_LOWER_THRESHOLD_COLOR & filtered_result_df$A > log10(0.000001)])
+color_palette <- RColorBrewer::brewer.pal(length(condition_met_variables), "Paired")
+
+# Add a new column specifying whether the line should be colored or not
+filtered_result_df <- filtered_result_df %>%
+  mutate(Color = if_else(Variable %in% condition_met_variables, Variable, "NotColored"))
+
+filtered_result_df <- merge(filtered_result_df, gtdb_cleaned, by.x="Variable", by.y="BIN_ID_CLEANED", all.x=TRUE)
+
+# Remove s__ suffix for labels in legend
+filtered_result_df$SPECIES <- sub("s__","",filtered_result_df$SPECIES)
+
+filtered_according_condition <- filtered_result_df[filtered_result_df$Variable %in% as.character(condition_met_variables),]
+
+# Distinguish between Acidovorax and other genomes via a linetype
+filtered_result_df$lineType <- "Other Genomes"
+filtered_result_df[filtered_result_df$Variable == "ERR4678625_bin.31",]$lineType <- "Acidovorax defluvii"
+
+# Plot the results using ggplot2
+g <- ggplot(filtered_result_df, aes(x = A, y = U, color = Color, group = Variable, linetype= lineType)) +
+    geom_line(size=3) +
+    scale_linetype_manual(values=c("dotted", "solid")) + 
+    scale_color_manual(values = c(setNames(color_palette, as.character(condition_met_variables))),
+                       labels=c(filtered_according_condition[!duplicated(filtered_according_condition[,c("Variable")]),]$SPECIES)) +
+    labs(title = "Global Ubiquity - Abundance Plot",
+         linetype = "Species",
+         color = "                                  ",
+         x = "Log 10 Abundance Threshold",
+         y = "Percent Ubiquity", color = "Genomes") +
+    theme_minimal() + theme(text = element_text(size=30), plot.title = element_text(hjust = 0.5)) 
+
+#ggsave(file="/tmp/out.png", plot=g, bg="white", width=25, height=15)
+checkm_df[checkm_df$BIN_ID == "ERR2607536_bin.16.fa"]
+checkm_df[checkm_df$BIN_ID == "ERR2683259_bin.55.fa"]
+```
+## Get different statistics regarding Acidovorax
+
+```{r acidovorax_devlufi}
+
+maxColumnNames <- apply(heatmapMa,1,function(row) colnames(heatmapMa)[which.max(row)])
+resDf <- cbind(data.frame(heatmapMa),data.frame(maxColumnNames = maxColumnNames))
+
+nrow(resDf[resDf$maxColumnNames == "ERR4678625_bin.31",])/(nrow(resDf)/100)
+
+resDfEu <- resDf[rownames(resDf) %in% selected_samples[selected_samples$CONTINENT == "Europe & Central Asia",]$SAMPLE,]
+nrow(resDfEu[resDfEu$maxColumnNames == "ERR4678625_bin.31",])/(nrow(resDfEu)/100)
+
+resDfNorth_America <- resDf[rownames(resDf) %in% selected_samples[selected_samples$CONTINENT == "North America",]$SAMPLE,]
+nrow(resDfNorth_America[resDfNorth_America$maxColumnNames == "ERR4678625_bin.31",])/(nrow(resDfNorth_America)/100)
+
+heatmapMa <- data.frame(heatmapMa)
+
+nrow(selected_samples[selected_samples$CONTINENT == "Europe & Central Asia",])
+
+sum(rownames(heatmapMa[heatmapMa$ERR4678625_bin.31 > 0,])  %in% selected_samples[selected_samples$CONTINENT == "Europe & Central Asia",]$SAMPLE)
+
+(sum(rownames(heatmapMa[heatmapMa$ERR4678625_bin.31 > 0,])  %in% selected_samples[selected_samples$CONTINENT == "Europe & Central Asia",]$SAMPLE)/(nrow(selected_samples[selected_samples$CONTINENT == "Europe & Central Asia",])/100))
+
+(sum(rownames(heatmapMa[heatmapMa$ERR4678625_bin.31 > 0,])  %in% selected_samples[selected_samples$CONTINENT == "North America",]$SAMPLE)/(nrow(selected_samples[selected_samples$CONTINENT == "North America",])/100))
+
+```
+## Compute Ubiquity-Abundance plots for all continents separately
+
+```{r core_microbiome_for_multiple_continents}
+
+per_continent_core <- function(heatmapMa, continent, filter_min_ubiquity, color_min_ubiquity){
+  ma <- log10(heatmapMa)
+  ma <- ma[rownames(ma) %in% selected_samples[selected_samples$CONTINENT == continent,]$SAMPLE,]
+
+  thresholds <- seq(min(ma[ma!=min(ma)]), max(ma), 0.001)
+
+  # Reverse the order of the thresholds
+  thresholds <- rev(thresholds)
+
+  count_samples <- function(column, threshold) {
+    sum(column >= as.numeric(threshold))
+  }
+
+# Apply the function to each combination of column and threshold
+  result_df <- expand.grid(A = thresholds, Variable = colnames(ma))
+  result_df$U <- apply(result_df, 1, function(row) count_samples(ma[, row["Variable"]], row["A"]))/nrow(ma) * 100
+
+  filtered_result_df <- result_df %>% filter((U> filter_min_ubiquity & A > log10(0.000000000001))) %>% dplyr::as_data_frame()
+
+  filtered_result_df <- result_df[result_df$Variable %in% filtered_result_df$Variable,]
+  filtered_result_df$lineType <- "Other Genomes"
+  filtered_result_df[filtered_result_df$Variable == "ERR4678625_bin.31",]$lineType <- "Acidovorax defluvii"
+
+  condition_met_variables <- unique(filtered_result_df$Variable[filtered_result_df$U > color_min_ubiquity & filtered_result_df$A > log10(0.000001)])
+
+  # Create a color palette for those variables using viridis
+  color_palette <- turbo(length(condition_met_variables))
+
+  # Add a new column specifying whether the line should be colored or not
+  #result_df$Color <- ifelse(result_df$Variable %in% condition_met_variables, result_df$Variable, "NotColored")
+  # Add a new column specifying whether the line should be colored or not
+  filtered_result_df <- filtered_result_df %>%
+  mutate(Color = if_else(Variable %in% condition_met_variables, Variable, "NotColored"))
+
+  filtered_result_df <- merge(filtered_result_df, gtdb_cleaned, by.x="Variable", by.y="BIN_ID_CLEANED")
+  filtered_result_df$SPECIES <- sub("s__","",filtered_result_df$SPECIES)
+
+  filtered_according_condition <- filtered_result_df[filtered_result_df$Variable %in% as.character(condition_met_variables),]
+
+
+# Plot the results using ggplot2
+ ggplot(filtered_result_df, aes(x = A, y = U, color = Color, group = Variable, linetype= lineType)) +
+    geom_line(size=2) +
+    scale_linetype_manual(values=c("dotted", "solid")) + 
+    labs(title = paste(continent, "Ubiquity - Abundance Plot", sep=" "),
+         linetype = "     ",
+      #   color = "             ",
+         x = "Log 10 Abundance Threshold",
+         y = "Percent Ubiquity", color = "Species") +
+  #  geom_text(vjust = -0.5, hjust = 1, size = 3) + 
+    
+    scale_color_manual(values = c(setNames(color_palette, as.character(condition_met_variables))), labels=c(filtered_according_condition[!duplicated(filtered_according_condition[,c("Variable")]),]$SPECIES)) +
+    theme_minimal() + theme( text = element_text(size=30), plot.title = element_text(hjust = 0.5)) + guides(linetype="none")
+   #ggsave(file="/tmp/out.png", plot=g, bg="white", width=25, height=15)
+
+}
+
+#per_continent_core(heatmapMa, "Asia", 50, 75)
+per_continent_core(heatmapMa, "Europe & Central Asia", 75, 90)
+#per_continent_core(heatmapMa, "Africa", 50, 60)
+#per_continent_core(heatmapMa, "North America", 50, 90)
+#per_continent_core(heatmapMa, "Australia", 50, 90)
+#per_continent_core(heatmapMa, "South America and the Caribbean", 50, 75)
+```
+## Compute Ubiquity per Country
+
+```{r define_core}
+per_country_ubiquity <- function(heatmapMa, country){
+  ma <-  log10(heatmapMa)
+  ma <- ma[rownames(ma) %in% selected_samples[selected_samples$COUNTRY == country & !is.na(selected_samples$COUNTRY),]$SAMPLE,, drop=FALSE]
+
+  thresholds <- seq(min(ma[ma!=min(ma)]), max(ma), 0.001)
+
+  # Reverse the order of the thresholds
+  thresholds <- rev(thresholds)
+
+  count_samples <- function(column, threshold) {
+    sum(column >= as.numeric(threshold))
+  }
+
+  # Apply the function to each combination of column and threshold
+  result_df <- expand.grid(A = thresholds, Variable = colnames(ma))
+  result_df$U <- apply(result_df, 1, function(row) count_samples(ma[, row["Variable"]], row["A"]))/nrow(ma) * 100
+  return(result_df)
+}
+
+found_mags <- data.frame(Variable = c(), CORE_GENOME=c(), CORE_GENOME_UBIQUITY=c())
+for(c in unique(selected_samples[!is.na(selected_samples$COUNTRY),]$COUNTRY)){ 
+  print(c)
+  if(any(rownames(heatmapMa) %in% selected_samples[selected_samples$COUNTRY == c,]$SAMPLE)){
+    found_mags_new <- per_country_ubiquity(heatmapMa, c) %>% filter(U > 90) %>% group_by(Variable) %>% summarise(CORE_GENOME=unique(Variable[which.max(U)]), CORE_GENOME_UBIQUITY=unique(U[which.max(U)])) %>% ungroup()
+    found_mags_new$CORE_GENOME_COUNTRY <- c
+    found_mags <- rbind(found_mags, found_mags_new)
+  }
+}
+```
+## Core microbiome per continent fulfiling minimal ubiquity per country (see previous section) 
+
+```{r calc_statistic}
+
+found_mags_country <- merge(found_mags, selected_samples %>% distinct(COUNTRY, CONTINENT), by.x="CORE_GENOME_COUNTRY", by.y="COUNTRY", all.x=TRUE)
+genome_distribution_country <- found_mags_country %>% group_by(CORE_GENOME) %>% summarise(NR_COUNTRY = n())
+genome_distribution_country_gtdb <- merge(genome_distribution_country, gtdb_cleaned, by.x="CORE_GENOME",by.y="BIN_ID_CLEANED", all.x=TRUE)
+
+selected_samples_continent <- selected_samples %>% group_by(CONTINENT) %>% mutate(NR_POSSIBLE_COUNTRY = n_distinct(COUNTRY))  %>%
+  distinct(COUNTRY, CONTINENT, NR_POSSIBLE_COUNTRY)
+
+get_continent_mags <- function(found_mags, continent, selected_samples){
+  found_mags_country <- merge(found_mags, selected_samples, by.x="CORE_GENOME_COUNTRY", by.y="COUNTRY", all.x=TRUE)
+  genome_distribution_country <- found_mags_country[found_mags_country$CONTINENT==continent,] %>% group_by(CORE_GENOME) %>% summarise(NR_COUNTRY = n(), NR_POSSIBLE_COUNTRY=unique(NR_POSSIBLE_COUNTRY))
+  genome_distribution_country_gtdb <- merge(genome_distribution_country, gtdb_cleaned, by.x="CORE_GENOME",by.y="BIN_ID_CLEANED", all.x=TRUE)
+  return(genome_distribution_country_gtdb)
+}
+
+THRESHOLD_CONTINENT_MICROBIOME = 80
+
+core_microbiome_europe <- get_continent_mags(found_mags, "Europe & Central Asia", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="Europe & Central Asia") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME, CONTINENT)
+
+core_microbiome_north_america <- get_continent_mags(found_mags, "North America", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="North America") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+core_microbiome_south_america <- get_continent_mags(found_mags, "Latin America & Caribbean", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="Latin America & Caribbean") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+core_microbiome_asia <- get_continent_mags(found_mags, "South Asia", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="South Asia") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+core_microbiome_sub_saharan_africa <- get_continent_mags(found_mags, "Sub-Saharan Africa", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="Sub-Saharan Africa") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+core_microbiome_north_africa <- get_continent_mags(found_mags, "Middle East & North Africa", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="Middle East & North Africa") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+core_microbiome_australia <- get_continent_mags(found_mags, "East Asia & Pacific", selected_samples_continent) %>% mutate(PERCENTAGE_COUNTRY_CORE_GENOME = NR_COUNTRY/(NR_POSSIBLE_COUNTRY/100), CONTINENT="East Asia & Pacific") %>% filter(PERCENTAGE_COUNTRY_CORE_GENOME > THRESHOLD_CONTINENT_MICROBIOME) %>% select(BIN_ID, NR_COUNTRY,classification, PERCENTAGE_COUNTRY_CORE_GENOME)
+
+
+core_microbiome_europe
+core_microbiome_north_america
+core_microbiome_south_america
+core_microbiome_asia
+core_microbiome_sub_saharan_africa
+core_microbiome_north_africa
+core_microbiome_australia
+
+```

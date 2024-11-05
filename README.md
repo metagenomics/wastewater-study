@@ -1,4 +1,20 @@
-# Metagenomics-tk setup for Global Wastewater Study
+# Wastewater Study using Metagenomics-tk
+
+This repository contains additional scripts and information regarding the [Metagenomics-Tk paper](https://www.biorxiv.org/content/10.1101/2024.10.22.619569):
+
+1. Data used as input.
+
+2. Instructions on how the Metagenomics-Toolkit has been executed.
+
+3. R scripts for the sewage core microbiome analysis.
+
+4. Metagenomics-Tk output and EMGB data for vizualization.
+
+## Sewage Microbiome Samples
+
+The *datasets* directory contains all ACCESSION ids that have been processed.
+
+## Metagenomics-tk setup
 
 The following instructions explain how we setup the metagenomics-tk pipeline for the re-analysis of a global wastewater study.
 
@@ -90,11 +106,7 @@ echo "PATH" > paths.tsv && find gtdb -name "*.fna.gz" | xargs -I {} readlink -f 
 1. Install nextflow
 `cd metagenomics-tk && make nextflow`
 
-2. In addition to the main Nextflow run command you can optionaly add the following parameter:
-
-Specify `-with-weblog http://localhost:8000/run/<token-id>/` if you want to use a logging system like nf-tower or TraceFlow(https://github.com/vktrrdk/nextflowAnalysis).
-
-Final command:
+2. Final command:
 
 ```
 ./nextflow -c AWS run main.nf \
@@ -149,7 +161,21 @@ where
   * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
   * OUTPUT points to an output directory or S3 bucket if available.
  
-## Best Practices
+### Best Practices
 
 * In case the pipeline stops, please first delete all sample keys in the output S3 bucket and then resume the pipeline.
+
+
+## R Sewage Core Microbiome Analysis
+
+The sewage core microbiome analysis has been done in R using R version 4.4.1 and the [renv](https://github.com/rstudio/renv) package for reproducibility. R scripts can be found in the core_microbiome_r directory.
+The R markdown script downloads files that are stored publicly in S3 and creates different plots, like the ubiquity-abundance figures showed in the Metagenomics-tk paper.
+
+## Output Files
+
+The Toolkit output of all sewage datasets is publicly available via the S3 link s3://wastewater
+using the endpoint url https://openstack.cebitec.uni-bielefeld.de:8080.
+
+The EMGB input files based on the Metagenomics-Tk output can be downloaded here:
+https://openstack.cebitec.uni-bielefeld.de:8080/swift/v1/wastewater-emgb/
 
