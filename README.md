@@ -169,9 +169,5 @@ The R markdown script downloads files that are stored publicly in S3 and creates
 
 ## Output Files
 
-The Toolkit output of all sewage datasets is publicly available via the S3 link s3://wastewater
-using the endpoint url https://openstack.cebitec.uni-bielefeld.de:8080.
-
-The EMGB input files based on the Metagenomics-Tk output can be downloaded here:
-https://openstack.cebitec.uni-bielefeld.de:8080/swift/v1/wastewater-emgb/
-
+The Toolkit output and the generated EMGB input files of all sewage datasets is publicly available via the S3 link s3://mgtk/data
+using the endpoint url https://s3.bi.denbi.de.
