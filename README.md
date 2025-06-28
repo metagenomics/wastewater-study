@@ -92,7 +92,7 @@ aws_secret_access_key=
 1. Download GTDB
 
 ```
-mkdir -p gtdb && wget https://openstack.cebitec.uni-bielefeld.de:8080/databases/gtdbtk_r214_data.tar.gz  -O - | tar -xzvf - -C gtdb
+mkdir -p gtdb && wget https://s3.bi.denbi.de/mgtk/db/gtdbtk_r214_data.tar.gz -O - | tar -xzvf - -C gtdb
 ```  
 
 2. Prepare paths file
@@ -115,7 +115,8 @@ echo "PATH" > paths.tsv && find gtdb -name "*.fna.gz" | xargs -I {} readlink -f 
     --steps.annotation.mmseqs2.kegg.database.download.s5cmd.keyfile=S5CMD_CREDENTIALS \
     --steps.fragmentRecruitment.mashScreen.genomes=FRAGMENT_RECRUITMENT \
     --smetana_image=pbelmann/metabolomics:0.1.0  --carveme_image=pbelmann/metabolomics:0.1.0 \
-    --steps.metabolomics.beforeProcessScript=CPLEX  --steps.metabolomics.carveme.additionalParams='' 
+    --steps.metabolomics.beforeProcessScript=CPLEX  --steps.metabolomics.carveme.additionalParams='' \
+    --output=OUTPUT
 ```
 
 where
@@ -125,6 +126,7 @@ where
   * S5CMD_CREDENTIALS is a file containing credentials for S5CMD.
   * FRAGMENT_RECRUITMENT is a file containing a list of genomes. It 
   * CPLEX should point to the full path of the cplex build script (i.e. /path/to/cplex/buildScript.sh)
+  * OUTPUT points to an output directory or S3 bucket if available.
 
 #### 6. Postprocess
 

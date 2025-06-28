@@ -29,7 +29,7 @@ steps:
        additionalParams: " --detect_adapter_for_pe -q 20 --cut_front --trim_front1 3 --cut_tail --trim_tail1 3 --cut_mean_quality 10 --length_required 50 "
        timeLimit: "AUTO"
        download:
-         s5cmdParams: " --retry-count 30 --no-verify-ssl --no-sign-request --endpoint-url https://openstack.cebitec.uni-bielefeld.de:8080 "
+         s5cmdParams: " --retry-count 30 --no-verify-ssl --no-sign-request --endpoint-url https://s3.bi.denbi.de "
 
     nonpareil:
       additionalParams: " -v 10 -r 1234 "
@@ -97,7 +97,7 @@ steps:
       buffer: 1000
       database:
         download:
-          source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/gtdbtk_r214_data.tar.gz
+          source: https://s3.bi.denbi.de/mgtk/db/gtdbtk_r214_data.tar.gz
           md5sum: 390e16b3f7b0c4463eb7a3b2149261d9
       additionalParams: " --min_af 0.65 --scratch_dir . "
     # checkm lineage_wf
@@ -105,7 +105,7 @@ steps:
       database:
         download:
                 # Use Version number in databse names
-          source: "https://openstack.cebitec.uni-bielefeld.de:8080/databases/checkm_data_2015_01_16.tar.gz"
+          source: "https://s3.bi.denbi.de/mgtk/db/checkm_data_2015_01_16.tar.gz"
           md5sum: 0963b301dfe9345ea4be1246e32f6728
       buffer: 200
       additionalParams:
@@ -148,28 +148,28 @@ steps:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
         database:
           download:
-            source: s3://databases_internal/kegg-mirror-2021-01_mmseqs.tar.zst
+            source: s3://db_private/kegg-mirror-2021-01_mmseqs.tar.zst
             md5sum: 0d20db97b3e7ee6571ca1fd5ad3a87f1
             s5cmd:
               keyfile: /vol/spool/keyfile
-              params: '--retry-count 30 --no-verify-ssl --endpoint-url https://openstack.cebitec.uni-bielefeld.de:8080'
+              params: '--retry-count 30 --no-verify-ssl --endpoint-url https://s3.bi.denbi.de'
       vfdb:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
         database:
           download:
-            source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/vfdb_full_2022_07_29.tar.zst
+            source: https://s3.bi.denbi.de/mgtk/db/vfdb_full_2022_07_29.tar.zst
             md5sum: 7e32aaed112d6e056fb8764b637bf49e
       bacmet20_experimental:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
         database:
           download:
-            source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/bacmet20_experimental.tar.zst
+            source: https://s3.bi.denbi.de/mgtk/db/bacmet20_experimental.tar.zst
             md5sum: 57a6d328486f0acd63f7e984f739e8fe
       bacmet20_predicted:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
         database:
           download:
-            source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/bacmet20_predicted.tar.zst
+            source: https://s3.bi.denbi.de/mgtk/db/bacmet20_predicted.tar.zst
             md5sum: 55902401a765fc460c09994d839d9b64
       ncbi_nr:
         params: ' --max-seqs 300 --max-accept 50 -c 0.8 --cov-mode 0 --start-sens 4 --sens-steps 1 -s 6 --num-iterations 2 -e 0.001 --e-profile 0.01 --db-load-mode 3 '
@@ -192,12 +192,12 @@ steps:
       additionalParams: " --include_loose --include_nudge "
       database:
         download:
-          source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/card_20221209.tar.bz2
+          source: https://s3.bi.denbi.de/mgtk/db/card_20221209.tar.bz2
           md5sum: d7e627221a1d4584d1c1795cda774cdb
     keggFromMMseqs2:
       database:
         download:
-          source: s3://databases_internal/kegg-links-mirror-2021-01.tar.gz
+          source: s3://db_private/kegg-links-mirror-2021-01.tar.gz
           md5sum: 69538151ecf4128f4cb1e0ac21ff55b3
   plasmid:
     SCAPP:
@@ -214,7 +214,7 @@ steps:
       filterString: "Uncertain - plasmid or chromosomal|Plasmid"
       database:
         download:
-          source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/pfam-A_35.0.hmm.gz
+          source: https://s3.bi.denbi.de/mgtk/db/pfam-A_35.0.hmm.gz
           md5sum: c80b75bd48ec41760bbca19c70616e36
       additionalParams: " --thr 7 "
     PlasClass:
@@ -229,7 +229,7 @@ steps:
       sharedKmerThreshold: 0
       database:
         download:
-          source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/plasmids_plsdb_20220929.tar.bz2
+          source: https://s3.bi.denbi.de/mgtk/db/plasmids_plsdb_20220929.tar.bz2
           md5sum: 13c1078e6cd6a46e3f508c24ca07cc18
       additionalParams:
      # Parameters according to plsdb paper
@@ -246,7 +246,7 @@ steps:
       additionalParams: " --min_length 1000  "
       database:
         download:
-          source: https://openstack.cebitec.uni-bielefeld.de:8080/databases/mob_20220929.gz
+          source: https://s3.bi.denbi.de/mgtk/db/mob_20220929.gz
           md5sum: 21fcaf9c3754a985d1d6875939d71e28
   metabolomics:
      beforeProcessScript: ""
