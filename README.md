@@ -172,4 +172,9 @@ The R markdown script downloads files that are stored publicly in S3 and creates
 ## Output Files
 
 The Toolkit output and the generated EMGB input files of all sewage datasets are publicly available via the S3 link s3://mgtk/data/
-using the endpoint url https://s3.bi.denbi.de.
+using the endpoint url https://s3.bi.denbi.de for the samples and s3://mgtk/aggregated_data/10.26165/JUELICH-DATA/KXDWII for the aggregated output.
+Example command using s5cmd version v2.3.0-991c9fb:
+```
+s5cmd --endpoint-url https://s3.bi.denbi.de  --no-sign-request ls s3://mgtk/aggregated_data/10.26165/JUELICH-DATA/KXDWII/
+s5cmd --endpoint-url https://s3.bi.denbi.de --no-sign-request ls s3://mgtk/data/
+```
